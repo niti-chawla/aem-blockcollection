@@ -1,0 +1,200 @@
+import { createOptimizedPictureDam } from '../../scripts/aem.js';
+
+function getAEMHost() {
+  const aemMeta = document.querySelector('meta[name="urn:adobe:aue:system:aemconnection"]');
+  if (aemMeta) {
+    // content format: "aem:https://author-p...-e....adobeaemcloud.com"
+    return aemMeta.content.replace(/^aem:/, '');
+  }
+  if (window.location.hostname.includes('adobeaemcloud.com')) {
+    return window.location.origin;
+  }
+  return '';
+}
+
+async function fetchCF(jcrPath) {
+  // Strip /content/dam/ prefix ? the Assets API path is relative to /content/dam/
+  const apiPath = jcrPath.replace(/^\/content\/dam\//, '');
+  const host = getAEMHost();
+  try {
+    const resp = await fetch(`${host}/api/assets/${apiPath}.json`, {
+      credentials: 'include',
+    });
+    if (!resp.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(`Author Card: CF fetch failed (${resp.status}) for`, jcrPath);
+      return null;
+    }
+    return resp.json();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Author Card: CF fetch error', err);
+    return null;
+  }
+}
+
+/**
+ * Pull a named element value out of the CF API response.
+ * Handles both the legacy {elements: {name: {value}}} shape and
+ * the newer flattened shape.
+ */
+function getField(data, fieldName) {
+  return (
+    data?.properties?.elements?.[fieldName]?.value
+    ?? data?.properties?.[fieldName]
+    ?? null
+  );
+}
+
+/**
+ * Build and inject the card DOM into the block.
+ */
+
+function loadContactSVG() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 15 15" fill="none">
+                <path d = "M14.125 15C12.3889 15 10.6736 14.6215 8.97917 13.8646C7.28472 13.1076 5.74306 12.0347 4.35417 10.6458C2.96528 9.25694 1.89236 7.71528 1.13542 6.02083C0.378472 4.32639 0 2.61111 0 0.875C0 0.625 0.0833333 0.416667 0.25 0.25C0.416667 0.0833333 0.625 0 0.875 0H4.25C4.44444 0 4.61806 0.0659722 4.77083 0.197917C4.92361 0.329861 5.01389 0.486111 5.04167 0.666667L5.58333 3.58333C5.61111 3.80556 5.60417 3.99306 5.5625 4.14583C5.52083 4.29861 5.44444 4.43056 5.33333 4.54167L3.3125 6.58333C3.59028 7.09722 3.92014 7.59375 4.30208 8.07292C4.68403 8.55208 5.10417 9.01389 5.5625 9.45833C5.99306 9.88889 6.44444 10.2882 6.91667 10.6563C7.38889 11.0243 7.88889 11.3611 8.41667 11.6667L10.375 9.70833C10.5 9.58333 10.6632 9.48958 10.8646 9.42708C11.066 9.36458 11.2639 9.34722 11.4583 9.375L14.3333 9.95833C14.5278 10.0139 14.6875 10.1146 14.8125 10.2604C14.9375 10.4063 15 10.5694 15 10.75V14.125C15 14.375 14.9167 14.5833 14.75 14.75C14.5833 14.9167 14.375 15 14.125 15ZM2.52083 5L3.89583 3.625L3.54167 1.66667H1.6875C1.75694 2.23611 1.85417 2.79861 1.97917 3.35417C2.10417 3.90972 2.28472 4.45833 2.52083 5ZM9.97917 12.4583C10.5208 12.6944 11.0729 12.8819 11.6354 13.0208C12.1979 13.1597 12.7639 13.25 13.3333 13.2917V11.4583L11.375 11.0625L9.97917 12.4583Z" fill = "#231F20" />
+            </svg>`;
+}
+
+function loadMailSVG() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M3.33317 16.6668C2.87484 16.6668 2.48248 16.5036 2.15609 16.1772C1.8297 15.8509 1.6665 15.4585 1.6665 15.0002V5.00016C1.6665 4.54183 1.8297 4.14947 2.15609 3.82308C2.48248 3.49669 2.87484 3.3335 3.33317 3.3335H16.6665C17.1248 3.3335 17.5172 3.49669 17.8436 3.82308C18.17 4.14947 18.3332 4.54183 18.3332 5.00016V15.0002C18.3332 15.4585 18.17 15.8509 17.8436 16.1772C17.5172 16.5036 17.1248 16.6668 16.6665 16.6668H3.33317ZM16.6665 6.66683L10.4373 10.5627C10.3679 10.6043 10.295 10.6356 10.2186 10.6564C10.1422 10.6772 10.0693 10.6877 9.99984 10.6877C9.93039 10.6877 9.85748 10.6772 9.78109 10.6564C9.7047 10.6356 9.63178 10.6043 9.56234 10.5627L3.33317 6.66683V15.0002H16.6665V6.66683ZM9.99984 9.16683L16.6665 5.00016H3.33317L9.99984 9.16683ZM3.33317 6.87516V5.646V5.66683V5.65641V6.87516Z" fill="#231F20"/>
+            </svg>`;
+}
+
+function getAuthorCard(block) {
+  const key = ['cfPath', 'bgColor', 'headingType', 'headingStyle', 'subHeadingType', 'subHeadingStyle', 'descriptionStyle', 'personalizationId'];
+  const values = [];
+  [...block.children].forEach((child) => {
+    const text = (child.textContent) ? child.textContent.trim() : '';
+    values.push(text);
+  });
+  return key.reduce((acc, currKey, index) => {
+    acc[currKey] = values[index] || '';
+    return acc;
+  }, {});
+}
+
+function renderCard(block, cfData) {
+  const {
+    headingType, headingStyle, subHeadingType, subHeadingStyle, descriptionStyle,
+  } = getAuthorCard(block);
+
+  const image = getField(cfData, 'profileImage');
+  const name = getField(cfData, 'heading');
+  const position = getField(cfData, 'subHeading');
+  const bio = getField(cfData, 'desc');
+  const relatedInfo1 = getField(cfData, 'relatedInfo1');
+  const relatedInfo1Url = getField(cfData, 'relatedInfo1Url');
+  const relatedInfo2 = getField(cfData, 'relatedInfo2');
+  const relatedInfo2Url = getField(cfData, 'relatedInfo2Url');
+
+  // Clear block
+  block.innerHTML = '';
+
+  // Main wrapper
+  const container = document.createElement('div');
+  container.className = 'author-card__container';
+
+  // Image
+  if (image) {
+    const imageWrapper = document.createElement('div');
+    imageWrapper.className = 'author-card__image-wrapper';
+    const picture = createOptimizedPictureDam(image, name, false, [{ width: '750' }]);
+    picture.querySelector('img').className = 'author-card__image';
+    imageWrapper.appendChild(picture);
+    container.appendChild(imageWrapper);
+  }
+
+  const heading = document.createElement('div');
+  heading.className = 'author-card__heading';
+
+  if (name) {
+    const title = document.createElement((headingType !== '') ? headingType : 'h2');
+    title.className = `author-card__title ${headingStyle}`;
+    title.textContent = name;
+    heading.appendChild(title);
+  }
+
+  if (position) {
+    const posEl = document.createElement((subHeadingType !== '') ? subHeadingType : 'h3');
+    posEl.className = `author-card__position ${subHeadingStyle}`;
+    posEl.textContent = position;
+    heading.appendChild(posEl);
+  }
+
+  if (name || position) {
+    container.appendChild(heading);
+  }
+
+  if (bio) {
+    const description = document.createElement('div');
+    description.className = `author-card__description ${descriptionStyle}`;
+    description.innerHTML = bio;
+    container.appendChild(description);
+  }
+
+  /* Contact Section */
+  const contact = document.createElement('div');
+  contact.className = 'author-card__contact';
+
+  /* Phone */
+  const phoneItem = document.createElement('div');
+  phoneItem.className = 'author-card__contact-item';
+
+  const phoneIcon = document.createElement('span');
+  phoneIcon.className = 'author-card__icon';
+  phoneIcon.innerHTML = loadContactSVG();
+
+  const phoneText = document.createElement((relatedInfo1Url !== '' && relatedInfo1Url !== null) ? 'a' : 'span');
+  phoneText.className = 'author-card__text';
+  if (relatedInfo1Url !== '' && relatedInfo1Url !== null) {
+    phoneText.href = relatedInfo1Url;
+  }
+  phoneText.textContent = relatedInfo1;
+
+  phoneItem.append(phoneIcon, phoneText);
+
+  if (relatedInfo1 !== '' && relatedInfo1 !== null) {
+    contact.appendChild(phoneItem);
+  }
+
+  /* Email */
+  const emailItem = document.createElement('div');
+  emailItem.className = 'author-card__contact-item';
+
+  const emailIcon = document.createElement('span');
+  emailIcon.className = 'author-card__icon';
+  emailIcon.innerHTML = loadMailSVG();
+
+  const emailText = document.createElement((relatedInfo2Url !== '' && relatedInfo2Url !== null) ? 'a' : 'span');
+  emailText.className = 'author-card__text';
+
+  if (relatedInfo2Url !== '' && relatedInfo2Url !== null) {
+    emailText.href = relatedInfo2Url;
+  }
+  emailText.textContent = relatedInfo2;
+  emailItem.append(emailIcon, emailText);
+
+  if (relatedInfo2 !== '' && relatedInfo2 !== null) {
+    contact.appendChild(emailItem);
+  }
+
+  container.appendChild(contact);
+  block.appendChild(container);
+}
+
+export default async function decorate(block) {
+  const { cfPath, bgColor, personalizationId } = getAuthorCard(block);
+  block.dataset.personalizationId = personalizationId;
+  block.className = `author-card ${bgColor}`;
+
+  if (!cfPath) {
+    return;
+  }
+
+  const cfData = await fetchCF(cfPath);
+  if (cfData) {
+    renderCard(block, cfData);
+  }
+}
