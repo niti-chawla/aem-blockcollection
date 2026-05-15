@@ -24,7 +24,8 @@
       "table",
       "text",
       "title",
-      "video"
+      "video",
+	"dynamic-table"
     ]
   },
   {

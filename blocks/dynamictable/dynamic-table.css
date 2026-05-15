@@ -1,0 +1,49 @@
+/* blocks/dynamic-table/dynamic-table.css */
+
+/* CSS custom properties scoped to the block */
+.dynamic-table {
+  --dt-accent:       #2563eb;
+  --dt-accent-light: #eff4ff;
+  --dt-danger:       #ef4444;
+  --dt-danger-light: #fef2f2;
+  --dt-surface:      #f8f9fc;
+  --dt-border:       #e2e6ef;
+  --dt-muted:        #64748b;
+  --dt-radius:       8px;
+}
+
+/* Toolbar */
+.dt-toolbar    { display: flex; gap: 12px; flex-wrap: wrap; padding: 12px 16px;
+                  background: var(--dt-surface); border: 1px solid var(--dt-border);
+                  border-radius: var(--dt-radius); }
+
+.dt-ctrl-btn   { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--dt-border);
+                  font-weight: 600; font-size: 0.78rem; cursor: pointer; }
+.dt-ctrl-btn.add     { border-color: var(--dt-accent); color: var(--dt-accent); }
+.dt-ctrl-btn.remove:hover { border-color: var(--dt-danger); color: var(--dt-danger); }
+
+/* Editable column header */
+.dt-header-input { border: none; outline: none; background: transparent;
+                    font-size: 0.78rem; font-weight: 600; letter-spacing: 0.5px;
+                    text-transform: uppercase; cursor: text; }
+.dt-header-input:focus { background: var(--dt-accent-light); color: var(--dt-accent); }
+
+/* Editable cell */
+.dt-cell-input        { border: 1px solid transparent; background: transparent;
+                         width: 100%; padding: 5px 8px; border-radius: 5px; }
+.dt-cell-input:hover  { border-color: var(--dt-border); background: #fff; }
+.dt-cell-input:focus  { border-color: var(--dt-accent);
+                         box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+
+/* Row × button — visible only on row hover */
+.dt-remove-row-btn       { opacity: 0; transition: opacity 0.15s; }
+tr:hover .dt-remove-row-btn { opacity: 1; }
+.dt-remove-row-btn:hover  { background: var(--dt-danger-light);
+                              border-color: var(--dt-danger); color: var(--dt-danger); }
+
+/* Style variants */
+[data-style="striped"] tbody tr:nth-child(even) { background: var(--dt-surface); }
+[data-style="bordered"] th,
+[data-style="bordered"] td                     { border: 1px solid var(--dt-border); }
+[data-style="compact"] th,
+[data-style="compact"] td                      { padding: 4px 8px; }

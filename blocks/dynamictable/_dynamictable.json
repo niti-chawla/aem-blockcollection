@@ -1,0 +1,14 @@
+[
+  {
+    "id": "dynamic-table",
+    "fields": [
+      {
+        "component": "text",
+        "name": "tableData",
+        "label": "Table Data (managed by block)",
+        "valueType": "string",
+        "value": ""
+      }
+    ]
+  }
+]
